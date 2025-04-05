@@ -1,6 +1,19 @@
 import streamlit as st
 from openai import OpenAI
+import sys
 
+# --- Version Check ---
+required_openai_version = "1.3.8"
+
+def version_warning(installed, required):
+    st.warning(
+        f"⚠️ Your installed OpenAI version is `{installed}`, but this app needs at least `{required}`.\n"
+        f"Please update `requirements.txt` to use `openai>={required}` and redeploy."
+    )
+
+if OpenAI.__version__ < required_openai_version:
+    version_warning(OpenAI.__version__, required_openai_version)
+    st.stop()  # Stop app from continuing if version is too old
 # -----------------------------
 # Prompt Enhancer Logic
 # -----------------------------
