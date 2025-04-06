@@ -10,7 +10,6 @@ from openai import OpenAI
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-st.text(f"Using openai version: {openai.__version__}")
 
 st.set_page_config(page_title="Children's Book Blurb Generator", page_icon="📚")
 st.title("📚 Children's Book Blurb Generator")
