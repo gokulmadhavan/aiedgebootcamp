@@ -64,15 +64,11 @@ h1, h2, h3, p, div {
 # App title
 st.title("Matrix Gemini Chat")
 
-# Debug information - this will help see what's happening
-st.write("App is loading... If you see this, the basic UI is working.")
-
 # Initialize chat messages
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
 # Show chat messages
-st.write("Chat history:")
 for message in st.session_state.messages:
     role = message["role"]
     content = message["content"]
@@ -95,27 +91,27 @@ try:
     # Try to get from secrets first
     try:
         api_key = st.secrets["gemini"]["api_key"]
-        st.write("Found API key in secrets")
     except:
         # Fallback to manual entry for debugging
         api_key = st.text_input("Enter Gemini API Key for debugging:", type="password")
         if not api_key:
             st.warning("Please enter your API key")
             st.stop()
-        st.write("Using manually entered API key")
     
     # Configure the API
     genai.configure(api_key=api_key)
-    st.write("API configured successfully")
     
 except Exception as e:
     st.error(f"Error configuring API: {str(e)}")
     st.stop()
 
-# Simple user input
-user_input = st.text_input("Your message:")
+# Create a form for input
+with st.form(key="chat_form", clear_on_submit=True):
+    user_input = st.text_input("Your message:", key="user_input")
+    submit_button = st.form_submit_button("Send")
 
-if st.button("Send") and user_input:
+# Process form submission
+if submit_button and user_input:
     # Add user message
     st.session_state.messages.append({"role": "user", "content": user_input})
     
@@ -126,5 +122,5 @@ if st.button("Send") and user_input:
     # Add bot response
     st.session_state.messages.append({"role": "bot", "content": bot_response})
     
-    # Reload page to show new messages
-    st.experimental_rerun()
+    # Force a rerun to update the chat display
+    st.rerun()
