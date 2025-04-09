@@ -1,6 +1,5 @@
 import streamlit as st
 import google.generativeai as genai
-import os
 
 # Page configuration
 st.set_page_config(page_title="Matrix Gemini Chat", layout="wide")
@@ -75,10 +74,20 @@ for message in st.session_state.messages:
     with st.container():
         st.markdown(f"<div class='chat-message {role}'>{content}</div>", unsafe_allow_html=True)
 
-# Function to get response from Gemini
-def get_gemini_response(prompt):
+# Function to get available models
+def get_available_models():
     try:
-        model = genai.GenerativeModel('gemini-pro')
+        models = genai.list_models()
+        model_names = [model.name.split('/')[-1] for model in models if 'generateContent' in model.supported_generation_methods]
+        return model_names
+    except Exception as e:
+        st.error(f"Error listing models: {str(e)}")
+        return ["gemini-1.0-pro", "gemini-1.5-pro", "gemini-pro"]  # Fallback options
+
+# Function to get response from Gemini
+def get_gemini_response(prompt, model_name):
+    try:
+        model = genai.GenerativeModel(model_name)
         response = model.generate_content(
             f"User query: {prompt}\n\nImportant: Your response must be strictly less than 100 words."
         )
@@ -101,6 +110,19 @@ try:
     # Configure the API
     genai.configure(api_key=api_key)
     
+    # Get available models
+    model_options = get_available_models()
+    
+    # Select model with a sidebar for admin/debugging
+    with st.sidebar:
+        st.header("Model Settings")
+        selected_model = st.selectbox(
+            "Select Gemini Model:",
+            options=model_options,
+            index=0
+        )
+        st.caption("If you're getting model errors, try selecting a different model from the list.")
+    
 except Exception as e:
     st.error(f"Error configuring API: {str(e)}")
     st.stop()
@@ -117,7 +139,7 @@ if submit_button and user_input:
     
     # Get bot response
     with st.spinner("Thinking..."):
-        bot_response = get_gemini_response(user_input)
+        bot_response = get_gemini_response(user_input, selected_model)
     
     # Add bot response
     st.session_state.messages.append({"role": "bot", "content": bot_response})
