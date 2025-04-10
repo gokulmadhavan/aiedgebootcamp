@@ -5,6 +5,7 @@ from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationChain
 from langchain.prompts import PromptTemplate
 import os
+import time
 
 # Set page configuration
 st.set_page_config(page_title="LangChain Chatbot", page_icon="🤖", layout="wide")
@@ -38,6 +39,12 @@ if "chatbot" not in st.session_state:
     st.session_state.chatbot = None
 if "summary_displayed" not in st.session_state:
     st.session_state.summary_displayed = False
+if "last_message_time" not in st.session_state:
+    st.session_state.last_message_time = 0
+if "last_message" not in st.session_state:
+    st.session_state.last_message = ""
+if "processing_message" not in st.session_state:
+    st.session_state.processing_message = False
 
 # App title and description
 st.title("🤖 LangChain Chatbot")
@@ -69,7 +76,7 @@ if gemini_api_key and not st.session_state.gemini_initialized:
         
         # Create the LangChain model
         llm = ChatGoogleGenerativeAI(
-            model="gemini-pro",
+            model="gemini-1.5-pro",
             google_api_key=gemini_api_key,
             temperature=0.7,
             convert_messages=True
@@ -147,19 +154,42 @@ if st.session_state.gemini_initialized and not st.session_state.summary_displaye
     with col2:
         end_chat = st.button("End Chat", key="end_chat")
     
-    # Process user input
+    # Process user input with rate limiting
     if user_input:
-        # Add user message to chat history
-        st.session_state.chat_history.append({"role": "user", "content": user_input})
+        current_time = time.time()
+        cooldown_period = 2  # seconds between messages
         
-        # Get response from LangChain model
-        response = st.session_state.chatbot.predict(input=user_input)
-        
-        # Add bot response to chat history
-        st.session_state.chat_history.append({"role": "bot", "content": response})
-        
-        # Force streamlit to rerun to display the new messages
-        st.rerun()
+        # Check if this is a duplicate message or if we're still in cooldown
+        if (user_input == st.session_state.last_message and 
+            current_time - st.session_state.last_message_time < cooldown_period):
+            st.warning("Please wait a moment before sending the same message again.")
+        elif st.session_state.processing_message:
+            st.warning("Still processing your previous message. Please wait.")
+        else:
+            # Set processing flag
+            st.session_state.processing_message = True
+            
+            # Add user message to chat history
+            st.session_state.chat_history.append({"role": "user", "content": user_input})
+            
+            # Update last message tracking
+            st.session_state.last_message = user_input
+            st.session_state.last_message_time = current_time
+            
+            try:
+                # Get response from LangChain model
+                response = st.session_state.chatbot.predict(input=user_input)
+                
+                # Add bot response to chat history
+                st.session_state.chat_history.append({"role": "bot", "content": response})
+            except Exception as e:
+                st.error(f"Error getting response: {e}")
+            finally:
+                # Reset processing flag
+                st.session_state.processing_message = False
+            
+            # Force streamlit to rerun to display the new messages
+            st.rerun()
     
     # End chat and generate summary
     if end_chat and openai_api_key:
@@ -181,4 +211,7 @@ if st.session_state.summary_displayed:
         st.session_state.conversation_memory = ConversationBufferMemory(return_messages=True)
         st.session_state.chat_history = []
         st.session_state.summary_displayed = False
+        st.session_state.last_message = ""
+        st.session_state.last_message_time = 0
+        st.session_state.processing_message = False
         st.rerun()
