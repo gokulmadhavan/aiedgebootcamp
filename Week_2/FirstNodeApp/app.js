@@ -25,7 +25,7 @@ async function getModel() {
     // console.log("Available models:", models);
     
     // You can try different model names if one doesn't work
-    return genAI.getGenerativeModel({ model: "gemini-pro" });
+    return genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
   } catch (error) {
     console.error("Error getting model:", error);
     throw error;
@@ -51,8 +51,16 @@ app.post('/api/chat', async (req, res) => {
     
     res.json({ response });
   } catch (error) {
-    console.error('Error generating response:', error);
-    res.status(500).json({ error: 'Failed to generate response', details: error.message });
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
+    res.status(500).json({ 
+      error: 'Failed to generate response', 
+      details: error.message,
+      name: error.name 
+    });
   }
 });
 
