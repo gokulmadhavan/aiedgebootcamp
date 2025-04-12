@@ -11,9 +11,9 @@ API_TOKEN = os.getenv("HUGGINGFACE_TOKEN")
 
 # Mapping of model display names to HuggingFace model repo names
 model_options = {
-    "Flux-Midjourney-Mix2-LoRA": "Flux-Midjourney-Mix2-LoRA",
-    "black-forest-labs/FLUX.1-dev": "black-forest-labs/FLUX.1-dev",
-    "Stable Diffusion": "CompVis/stable-diffusion-v1-4"
+    "Stable Diffusion v1.4": "CompVis/stable-diffusion-v1-4",
+    "Stable Diffusion XL": "stabilityai/stable-diffusion-xl-base-1.0",
+    "DreamShaper v7": "Lykon/DreamShaper"
 }
 
 st.set_page_config(page_title="Image Generator", layout="centered")
