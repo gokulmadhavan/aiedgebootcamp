@@ -7,10 +7,17 @@ import os
 import io
 from PIL import Image
 import requests
+import time
 
 # Load environment variables
 load_dotenv()
 HF_TOKEN = os.getenv("HF_TOKEN")
+
+# Debug check for token
+if not HF_TOKEN:
+    st.error("❌ HF_TOKEN not found in environment variables. Please check your .env file.")
+elif not HF_TOKEN.startswith("hf_"):
+    st.error("❌ HF_TOKEN appears to be invalid. It should start with 'hf_'")
 
 # Streamlit page setup
 st.set_page_config(page_title="Children's Book Blurb Generator", page_icon="📚")
@@ -18,13 +25,16 @@ st.title("📚 Children's Book Blurb Generator")
 
 # Hugging Face model options
 TEXT_MODELS = [
-    "google/flan-t5-large",
-    "deepseek-ai/DeepSeek-V3-0324"
+    "google/flan-t5-base",
+    "facebook/opt-125m",
+    "distilgpt2"
 ]
 
+# Update the IMAGE_MODELS list to use more reliable models
 IMAGE_MODELS = [
-    "stable-diffusion-v1-5/stable-diffusion-v1-5",
-    "openfree/claude-monet"
+    "stabilityai/stable-diffusion-v1-5",  # More reliable model
+    "CompVis/stable-diffusion-v1-4",    # Alternative stable model
+    "stabilityai/stable-diffusion-2-1"  # Another reliable option
 ]
 
 # Inputs
@@ -38,7 +48,6 @@ char_input = st.text_area(
 book_title = st.text_input("📖 Book Title")
 genre = st.text_input("✨ Genre (optional)")
 setting = st.text_input("🌍 Setting (optional)")
-temperature = st.slider("🎨 Creativity (Temperature)", 0.0, 1.0, 0.8)
 
 # Parse character input
 def parse_characters(text: str) -> List[Tuple[str, int]]:
@@ -75,15 +84,67 @@ def get_blurb(prompt: str, model_id: str, token: str) -> str:
     try:
         headers = {"Authorization": f"Bearer {token}"}
         api_url = f"https://api-inference.huggingface.co/models/{model_id}"
-        response = requests.post(api_url, headers=headers, json={"inputs": prompt})
         
-        if response.status_code == 200:
-            return response.json()[0]["generated_text"].replace(prompt, "").strip()
-        else:
-            st.error("❌ Text generation failed.")
-            return ""
+        # Add parameters to get a longer, complete response
+        payload = {
+            "inputs": prompt,
+            "parameters": {
+                "max_length": 150,
+                "min_length": 50,
+                "temperature": 0.8,
+                "top_p": 0.9,
+                "do_sample": True
+            }
+        }
+        
+        # Add retry logic
+        max_retries = 3
+        retry_delay = 5  # seconds
+        
+        for attempt in range(max_retries):
+            response = requests.post(api_url, headers=headers, json=payload)
+            
+            if response.status_code == 200:
+                result = response.json()
+                # Debug the response
+                st.write("Debug - API Response:", result)
+                
+                # Handle different response formats
+                generated_text = ""
+                if isinstance(result, list):
+                    if len(result) > 0:
+                        if isinstance(result[0], str):
+                            generated_text = result[0]
+                        elif isinstance(result[0], dict):
+                            generated_text = result[0].get('generated_text', '')
+                elif isinstance(result, dict):
+                    generated_text = result.get('generated_text', '')
+                
+                if generated_text:
+                    # Clean up the response
+                    blurb = generated_text.replace(prompt, "").strip()
+                    # Make sure it ends with a complete sentence
+                    if not any(blurb.endswith(end) for end in ['.', '!', '?']):
+                        blurb = blurb[:blurb.rfind('.')+1] if '.' in blurb else blurb
+                    return blurb
+                else:
+                    st.error(f"❌ No generated text in response: {result}")
+                    return ""
+            elif response.status_code == 503:
+                if attempt < max_retries - 1:
+                    st.warning(f"Service temporarily unavailable. Retrying in {retry_delay} seconds... (Attempt {attempt + 1}/{max_retries})")
+                    time.sleep(retry_delay)
+                    continue
+                else:
+                    st.error("❌ Service is currently unavailable. Please try again later.")
+                    return ""
+            else:
+                st.error(f"❌ Text generation failed. Status code: {response.status_code}")
+                st.error(f"Response: {response.text}")
+                return ""
+                
     except Exception as e:
-        st.error(f"❌ Text generation failed: {e}")
+        st.error(f"❌ Text generation failed: {str(e)}")
         return ""
 
 # Generate image using Hugging Face API
@@ -105,11 +166,40 @@ BLURB: {blurb}
         headers = {"Authorization": f"Bearer {hf_token}"}
         response = requests.post(url, headers=headers, json={"inputs": prompt})
         
-        if response.status_code == 200:
-            return Image.open(io.BytesIO(response.content))
-        else:
-            st.error("❌ Failed to generate image.")
-            return None
+         # Add retry logic
+        max_retries = 3
+        retry_delay = 5  # seconds
+        
+        for attempt in range(max_retries):
+            response = requests.post(url, headers=headers, json={
+                "inputs": prompt,
+                "parameters": {
+                    "negative_prompt": "text, words, letters, watermark",
+                    "num_inference_steps": 30,
+                    "guidance_scale": 7.5
+                }
+            })
+            
+            if response.status_code == 200:
+                try:
+                    return Image.open(io.BytesIO(response.content))
+                except Exception as e:
+                    st.error(f"❌ Failed to process image data: {str(e)}")
+            elif response.status_code == 503:
+                if attempt < max_retries - 1:
+                    st.warning(f"Image generation temporarily unavailable. Retrying in {retry_delay} seconds... (Attempt {attempt + 1}/{max_retries})")
+                    time.sleep(retry_delay)
+                    continue
+            
+            # Show the actual error response
+            st.error(f"❌ Image generation failed (Status {response.status_code})")
+            st.error(f"Response: {response.text}")
+            
+            if attempt < max_retries - 1:
+                st.info(f"Retrying... (Attempt {attempt + 1}/{max_retries})")
+                time.sleep(retry_delay)
+            
+        return None
     except Exception as e:
         st.error(f"❌ Failed to generate image: {e}")
         return None
