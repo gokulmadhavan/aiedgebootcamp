@@ -26,15 +26,15 @@ st.title("📚 Children's Book Blurb Generator")
 # Hugging Face model options
 TEXT_MODELS = [
     "google/flan-t5-base",
-    "facebook/opt-125m",
+    "meta-llama/Llama-3.3-70B-Instruct",   
     "distilgpt2"
 ]
 
 # Update the IMAGE_MODELS list to use more reliable models
 IMAGE_MODELS = [
-    "stabilityai/stable-diffusion-v1-5",  # More reliable model
     "CompVis/stable-diffusion-v1-4",    # Alternative stable model
-    "stabilityai/stable-diffusion-2-1"  # Another reliable option
+    "openfree/flux-chatgpt-ghibli-lora",  # Another reliable option
+    "XLabs-AI/flux-RealismLora"
 ]
 
 # Inputs
@@ -174,7 +174,7 @@ BLURB: {blurb}
             response = requests.post(url, headers=headers, json={
                 "inputs": prompt,
                 "parameters": {
-                    "negative_prompt": "text, words, letters, watermark",
+                   # "negative_prompt": "text, words, letters, watermark",
                     "num_inference_steps": 30,
                     "guidance_scale": 7.5
                 }
@@ -222,7 +222,7 @@ if st.button("✨ Generate Blurb"):
                     image = generate_image(blurb, book_title, genre, HF_TOKEN)
 
                 if image:
-                    st.image(image, caption="🎨 AI-Generated Cover Image", use_column_width=True)
+                    st.image(image, caption="🎨 AI-Generated Cover Image", use_container_width=True)
 
                     # Download button
                     buffered = io.BytesIO()
