@@ -1,0 +1,17 @@
+# Core packages
+streamlit
+langchain
+langchain-openai
+langchain-community
+
+# Vector database
+faiss-cpu
+
+# Document processing
+pypdf
+docx2txt
+tiktoken
+
+# Other dependencies
+openai
+python-dotenv
