@@ -1,6 +1,6 @@
 import streamlit as st
 import requests
-from dotenv import load_dotenv
+from dotenv import load_dotenv # type: ignore
 import os
 from io import BytesIO
 from PIL import Image
