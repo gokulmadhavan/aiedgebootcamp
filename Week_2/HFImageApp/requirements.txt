@@ -1,6 +1,8 @@
-streamlit 
-huggingface_hub 
-transformers 
-diffusers 
-python-dotenv 
+streamlit
+huggingface_hub
+transformers
+diffusers
+python-dotenv
 torch
+Pillow
+accelerate

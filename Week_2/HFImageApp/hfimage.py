@@ -1,53 +1,46 @@
 # streamlit_app.py
 
 import streamlit as st
-import logging
 from typing import List, Tuple
+from dotenv import load_dotenv # type: ignore
 import os
-from dotenv import load_dotenv
-from huggingface_hub import InferenceClient
-from transformers import pipeline
-from diffusers import StableDiffusionPipeline
-import torch
-from io import BytesIO
+import io
 from PIL import Image
+import requests
 
-# Load Hugging Face token
+# Load environment variables
 load_dotenv()
 HF_TOKEN = os.getenv("HF_TOKEN")
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
+# Streamlit page setup
 st.set_page_config(page_title="Children's Book Blurb Generator", page_icon="📚")
 st.title("📚 Children's Book Blurb Generator")
 
-# Dropdowns for model selection
-text_models = [
+# Hugging Face model options
+TEXT_MODELS = [
     "google/flan-t5-large",
-    "tiiuae/falcon-7b-instruct",
-    "mistralai/Mistral-7B-Instruct-v0.1",
+    "deepseek-ai/DeepSeek-V3-0324"
 ]
 
-image_models = [
-    "CompVis/stable-diffusion-v1-4",
-    "stabilityai/stable-diffusion-2",
+IMAGE_MODELS = [
+    "stable-diffusion-v1-5/stable-diffusion-v1-5",
+    "openfree/claude-monet"
 ]
 
-selected_text_model = st.selectbox("🧠 Choose a text generation model:", text_models)
-selected_image_model = st.selectbox("🎨 Choose an image generation model:", image_models)
+# Inputs
+selected_text_model = st.selectbox("🧠 Choose a text generation model", TEXT_MODELS)
+selected_image_model = st.selectbox("🎨 Choose an image generation model", IMAGE_MODELS)
 
-# Input fields
 char_input = st.text_area(
     "👧🧒 Enter characters as a list of (Name, Age) pairs — one per line, e.g.,\nAlice, 7\nBob, 10"
 )
+
 book_title = st.text_input("📖 Book Title")
 genre = st.text_input("✨ Genre (optional)")
 setting = st.text_input("🌍 Setting (optional)")
 temperature = st.slider("🎨 Creativity (Temperature)", 0.0, 1.0, 0.8)
 
-# Parse characters
+# Parse character input
 def parse_characters(text: str) -> List[Tuple[str, int]]:
     lines = text.strip().split("\n")
     characters = []
@@ -60,7 +53,7 @@ def parse_characters(text: str) -> List[Tuple[str, int]]:
             return []
     return characters
 
-# Build prompt
+# Build prompt for text generation
 def build_prompt(characters, title, genre, setting):
     char_str = ", ".join([f"{name} ({age})" for name, age in characters])
     genre_str = genre if genre else "Use your best guess based on the title"
@@ -77,22 +70,26 @@ TASK: Generate a short blurb (<100 words) for the children's book based on the f
 Your blurb must be attractive and exciting. It must also be child-appropriate.
 """.strip()
 
-# Generate blurb using HuggingFace model
-def generate_blurb(prompt: str, model_name: str, token: str):
+# Generate text using Hugging Face API
+def get_blurb(prompt: str, model_id: str, token: str) -> str:
     try:
-        client = InferenceClient(model=model_name, token=token)
-        response = client.text_generation(prompt, max_new_tokens=100, temperature=temperature)
-        return response.strip()
+        headers = {"Authorization": f"Bearer {token}"}
+        api_url = f"https://api-inference.huggingface.co/models/{model_id}"
+        response = requests.post(api_url, headers=headers, json={"inputs": prompt})
+        
+        if response.status_code == 200:
+            return response.json()[0]["generated_text"].replace(prompt, "").strip()
+        else:
+            st.error("❌ Text generation failed.")
+            return ""
     except Exception as e:
-        logger.error(f"Text generation failed: {e}")
-        st.error("❌ Failed to generate blurb.")
+        st.error(f"❌ Text generation failed: {e}")
         return ""
 
-# Generate image using HuggingFace model
-def generate_image(blurb: str, title: str, genre: str, model_id: str, token: str) -> Image.Image:
+# Generate image using Hugging Face API
+def generate_image(blurb: str, title: str, genre: str, hf_token: str) -> Image.Image | None:
     try:
         genre_str = genre if genre else "the story"
-        
         prompt = f"""
 ROLE: You are an expert illustrator of children's books.
 TASK:
@@ -103,42 +100,46 @@ TITLE: {title}
 GENRE: {genre_str}
 BLURB: {blurb}
 """.strip()
-
-        pipe = StableDiffusionPipeline.from_pretrained(
-            model_id,
-            torch_dtype=torch.float16,
-            use_auth_token=token,
-        ).to("cuda" if torch.cuda.is_available() else "cpu")
-
-        image = pipe(prompt).images[0]
-        return image
+        
+        url = f"https://api-inference.huggingface.co/models/{selected_image_model}"
+        headers = {"Authorization": f"Bearer {hf_token}"}
+        response = requests.post(url, headers=headers, json={"inputs": prompt})
+        
+        if response.status_code == 200:
+            return Image.open(io.BytesIO(response.content))
+        else:
+            st.error("❌ Failed to generate image.")
+            return None
     except Exception as e:
-        logger.error(f"Image generation failed: {e}")
-        st.error("❌ Failed to generate image.")
+        st.error(f"❌ Failed to generate image: {e}")
         return None
 
-# Run app
-if st.button("✨ Generate Blurb and Image"):
-    if not HF_TOKEN or not all([char_input, book_title]):
-        st.warning("Please fill in all required fields and make sure your Hugging Face token is set.")
+# Generate blurb and image
+if st.button("✨ Generate Blurb"):
+    if not all([char_input, book_title]):
+        st.warning("Please fill in the characters and book title.")
     else:
         characters = parse_characters(char_input)
         if characters:
             prompt = build_prompt(characters, book_title, genre, setting)
-            blurb = generate_blurb(prompt, selected_text_model, HF_TOKEN)
+            blurb = get_blurb(prompt, selected_text_model, HF_TOKEN)
             if blurb:
                 st.subheader("📝 Your Book Blurb:")
                 st.success(blurb)
 
-                st.subheader("🖼️ Generated Cover Image:")
-                image = generate_image(blurb, book_title, genre, selected_image_model, HF_TOKEN)
+                # Image generation
+                with st.spinner("🖼️ Generating image..."):
+                    image = generate_image(blurb, book_title, genre, HF_TOKEN)
+
                 if image:
-                    st.image(image, caption="Generated Book Image", use_column_width=True)
-                    img_buffer = BytesIO()
-                    image.save(img_buffer, format="PNG")
+                    st.image(image, caption="🎨 AI-Generated Cover Image", use_column_width=True)
+
+                    # Download button
+                    buffered = io.BytesIO()
+                    image.save(buffered, format="PNG")
                     st.download_button(
-                        label="📥 Download Image",
-                        data=img_buffer.getvalue(),
-                        file_name="book_cover.png",
-                        mime="image/png",
+                        label="💾 Download Cover Image",
+                        data=buffered.getvalue(),
+                        file_name="cover_image.png",
+                        mime="image/png"
                     )
