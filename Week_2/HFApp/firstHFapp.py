@@ -40,7 +40,7 @@ if st.button("Generate Image") and prompt:
 
         if response.status_code == 200:
             image = Image.open(BytesIO(response.content))
-            st.image(image, caption="Generated Image", use_column_width=True)
+            st.image(image, caption="Generated Image", use_container_width=True)
 
             # Download button
             img_buffer = BytesIO()
